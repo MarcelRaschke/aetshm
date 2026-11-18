@@ -1,0 +1,94 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# GitHub
+.github
+.gitmodules
+
+# Development
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules
+vendor
+composer.lock
+package-lock.json
+yarn.lock
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.project
+.settings
+.classpath
+*.sublime-project
+*.sublime-workspace
+
+# Build artifacts
+build/
+dist/
+coverage/
+.next/
+out/
+
+# Temporary files
+*.log
+tmp/
+temp/
+.cache/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/workflows
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Documentation
+*.md
+docs/
+CHANGELOG*
+LICENSE*
+README*
+
+# OS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Backup/Archive
+# Original media (not served; RadioStudio.mov alone is 21 MB). Docker sends the
+# whole context to the daemon, so this keeps the build context small.
+archiv/
+*.bak
+*.backup
+*.tar.gz
+*.zip
+*.rar
+
+# Performance system (separate Docker setup)
+performance-system/
+
+# Legacy media at repo root: not served (Dockerfile only COPYs public/), but
+# ~28 MB of the ~30 MB build context without this entry (docs/BILDER.md).
+# Slows every `docker build .` (build-and-push-image.yml, test-docker-setup.yml,
+# Render autoDeploy) for bytes that never reach the image.
+RadioStudio.mov
+DJPult.gif
+JesseJayBanner.mov
