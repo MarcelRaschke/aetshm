@@ -1,0 +1,90 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "0 0 * * 0"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    # Bewusst unverbindlich: Dependency Review läuft nur mit aktivem Dependency graph
+    # und GitHub Advanced Security. Ohne diese Repo-Einstellungen scheitert der Job
+    # bei jedem Lauf. Der Befund ist akzeptiert, bis die Einstellungen aktiv sind.
+    # Zum Wiederaktivieren den Schlüssel continue-on-error entfernen.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4
+        with:
+          fail-on-severity: moderate
+
+  semgrep:
+    name: Semgrep Security Analysis
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.182.1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan --config p/owasp-top-ten --config p/security-audit --config p/cwe-top-25 --sarif --output semgrep.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: semgrep.sarif
+        if: always()
+
+  trivy:
+    name: Trivy Vulnerability Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@38b337fff0a2f984d5be173c99e3f633438167ec # master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          skip-dirs: "vendor,.git,node_modules"
+
+      - name: Debug - Verify Trivy output
+        if: always()
+        run: |
+          echo "Checking for Trivy SARIF output..."
+          if [ -f trivy-results.sarif ]; then
+            echo "✓ SARIF file found"
+            wc -l trivy-results.sarif
+          else
+            echo "✗ SARIF file not found - Trivy may have failed"
+            exit 1
+          fi
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-results.sarif
+        if: always()
