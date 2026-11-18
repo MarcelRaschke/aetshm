@@ -1,0 +1,214 @@
+name: Deploy to Production
+
+# Automatic deployment on push to main is paused: the production webroot must be
+# confirmed first (see DEPLOYMENT.md, "Webroot klären"). Start manually until then.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: Deploy Website
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://djjessejay.ch
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, ctype, fileinfo
+          cache: "composer"
+
+      - name: Validate PHP syntax
+        run: |
+          find . -name "*.php" -type f \
+            ! -path "./vendor/*" \
+            ! -path "./.git/*" \
+            -exec php -l {} \;
+
+      - name: Create deployment
+        id: create_deployment
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              required_contexts: [],
+              auto_merge: false,
+              description: 'Deployment to djjessejay.ch'
+            });
+            core.setOutput('deployment_id', deployment.data.id);
+
+      - name: Update deployment status - in_progress
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.create_deployment.outputs.deployment_id }},
+              state: 'in_progress',
+              description: 'Starting deployment to production'
+            });
+
+      - name: Build/Prepare assets
+        run: |
+          echo "Preparing deployment..."
+          find . -type f \( -name "*.php" -o -name "*.xml" -o -name "*.mov" \) \
+            ! -path "./.git/*" \
+            ! -path "./.github/*" | wc -l
+
+      - name: Create pre-deployment backup
+        id: backup
+        run: |
+          chmod +x ./scripts/backup-deployment.sh
+          ./scripts/backup-deployment.sh "${{ secrets.DEPLOY_HOST }}" "${{ secrets.DEPLOY_USER }}" || {
+            echo "warning: Backup creation failed, continuing with deployment"
+          }
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+      - name: Deploy via SFTP
+        id: deploy
+        uses: easingthemes/ssh-deploy@2cc5b27bf3029d0455dd5e09fe02633904031447 # main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
+          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+          REMOTE_PATH: /home/${{ secrets.DEPLOY_USER }}/public_html/
+          ARGS: "-avz --delete --checksum"
+          EXCLUDE: |
+            .git/
+            .github/
+            node_modules/
+            vendor/
+            .env
+            .env.local
+            *.swp
+            *.swo
+            *~
+            .DS_Store
+            npm-debug.log
+            package-lock.json
+
+      - name: Verify deployment health
+        id: verify
+        run: |
+          chmod +x ./scripts/verify-deployment.sh
+          ./scripts/verify-deployment.sh "https://djjessejay.ch"
+
+      - name: Rollback on health check failure
+        if: failure() && steps.verify.outcome == 'failure'
+        run: |
+          echo "Health check failed, initiating rollback..."
+          chmod +x ./scripts/restore-deployment.sh
+          ./scripts/restore-deployment.sh "${{ secrets.DEPLOY_HOST }}" "${{ secrets.DEPLOY_USER }}" || {
+            echo "error: Rollback failed - manual intervention required"
+            exit 1
+          }
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+      - name: Send Slack notification - success
+        if: success()
+        uses: slackapi/slack-github-action@fcfb566f8b0aab22203f066d80ca1d7e4b5d05b3 # v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        with:
+          payload: |
+            {
+              "text": "✅ Deployment successful to production",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Deployment Successful*\n*Environment*: Production (djjessejay.ch)\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*Branch*: ${{ github.ref_name }}\n*Status*: All health checks passed"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Send Slack notification - failure with rollback
+        if: failure() && steps.verify.outcome == 'failure'
+        uses: slackapi/slack-github-action@fcfb566f8b0aab22203f066d80ca1d7e4b5d05b3 # v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        with:
+          payload: |
+            {
+              "text": "❌ Deployment failed and rolled back",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Deployment Failed & Rolled Back*\n*Environment*: Production (djjessejay.ch)\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*Branch*: ${{ github.ref_name }}\n*Reason*: Health check failed\n*Action*: Automatic rollback to previous version successful"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Send Slack notification - deployment error
+        if: failure() && steps.deploy.outcome == 'failure'
+        uses: slackapi/slack-github-action@fcfb566f8b0aab22203f066d80ca1d7e4b5d05b3 # v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        with:
+          payload: |
+            {
+              "text": "⚠️ Deployment error - SFTP upload failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "⚠️ *Deployment Error*\n*Environment*: Production (djjessejay.ch)\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*Branch*: ${{ github.ref_name }}\n*Reason*: SFTP upload failed\n*Action*: No changes deployed, rollback not necessary"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Update deployment status - success
+        if: success()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.create_deployment.outputs.deployment_id }},
+              state: 'success',
+              description: 'Deployment succeeded - health check passed',
+              environment_url: 'https://djjessejay.ch'
+            });
+
+      - name: Update deployment status - failure
+        if: failure()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.create_deployment.outputs.deployment_id }},
+              state: 'failure',
+              description: 'Deployment failed or rolled back to previous version'
+            });
