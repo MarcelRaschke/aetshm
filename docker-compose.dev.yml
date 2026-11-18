@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # Nginx Web Server
+  web:
+    image: nginx:latest
+    container_name: blue-dimension-web-dev
+    restart: unless-stopped
+    volumes:
+      - ./public:/var/www/html/public:ro
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx_logs:/var/log/nginx
+    ports:
+      - "8000:80"
+      - "8443:443"
+    networks:
+      - blue-dimension-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: blue-dimension-db-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: jessejay
+      MYSQL_USER: app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_password}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - mysql_data:/var/lib/mysql
+      - mysql_logs:/var/log/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - blue-dimension-dev
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    command:
+      - --max_connections=100
+      - --default-storage-engine=InnoDB
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+  # Redis Cache (Optional)
+  cache:
+    image: redis:7-alpine
+    container_name: blue-dimension-cache-dev
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - blue-dimension-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    command: redis-server --appendonly yes
+
+networks:
+  blue-dimension-dev:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  nginx_logs:
+    driver: local
+  mysql_data:
+    driver: local
+  mysql_logs:
+    driver: local
+  redis_data:
+    driver: local
