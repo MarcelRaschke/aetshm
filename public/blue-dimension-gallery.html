@@ -34,6 +34,10 @@
       padding-right: max(16px, env(safe-area-inset-right, 0px));
     }
 
+    body.modal-open {
+      overflow: hidden;
+    }
+
     h1 {
       font-family: 'Space Grotesk', sans-serif;
       font-size: clamp(2.2rem, 5vw, 4rem);
@@ -51,7 +55,7 @@
     .filter-container {
       display: flex;
       gap: 12px;
-      margin-bottom: 40px;
+      margin-bottom: 14px;
       flex-wrap: wrap;
     }
 
@@ -78,6 +82,21 @@
       background: var(--gold);
       border-color: var(--gold);
       color: var(--bg);
+    }
+
+    .filter-btn:focus-visible,
+    .gallery-item:focus-visible,
+    .lightbox-close:focus-visible,
+    .lightbox-nav:focus-visible {
+      outline: 2px solid var(--gold2);
+      outline-offset: 2px;
+    }
+
+    .filter-summary {
+      color: var(--muted);
+      font-size: .84rem;
+      margin-bottom: 30px;
+      min-height: 1.35rem;
     }
 
     .gallery {
@@ -109,7 +128,8 @@
       transition: transform .4s;
     }
 
-    .gallery-item:hover .item-canvas {
+    .gallery-item:hover .item-canvas,
+    .gallery-item:focus-visible .item-canvas {
       transform: scale(1.08);
     }
 
@@ -125,7 +145,8 @@
       transition: opacity .3s;
     }
 
-    .gallery-item:hover .gallery-item-overlay {
+    .gallery-item:hover .gallery-item-overlay,
+    .gallery-item:focus-visible .gallery-item-overlay {
       opacity: 1;
     }
 
@@ -169,6 +190,9 @@
     }
 
     .lightbox-canvas {
+      width: min(90vw, 980px);
+      aspect-ratio: 16 / 10;
+      height: auto;
       max-width: 100%;
       max-height: 80vh;
       border: 1px solid var(--border);
@@ -214,18 +238,76 @@
     .lightbox-close:hover {
       color: var(--gold2);
     }
+
+    .lightbox-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--border);
+      background: rgba(6, 6, 7, .78);
+      color: var(--gold2);
+      cursor: pointer;
+      font-size: 1.6rem;
+      line-height: 1;
+      border-radius: 4px;
+      display: grid;
+      place-items: center;
+    }
+
+    .lightbox-nav.prev {
+      left: 14px;
+    }
+
+    .lightbox-nav.next {
+      right: 14px;
+    }
+
+    .lightbox-nav:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 720px) {
+      .lightbox-nav {
+        top: auto;
+        bottom: 92px;
+      }
+
+      .lightbox-nav.prev {
+        left: 10px;
+      }
+
+      .lightbox-nav.next {
+        right: 10px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+
+      .gallery-item:hover .item-canvas,
+      .gallery-item:focus-visible .item-canvas {
+        transform: none;
+      }
+    }
   </style>
 </head>
 <body>
   <h1>Blue Dimension</h1>
   <p class="subtitle">Generative Visual Archive · DJ Jesse Jay / cy8er</p>
 
-  <div class="filter-container">
-    <button class="filter-btn active" data-filter="all">All</button>
-    <button class="filter-btn" data-filter="branding">Branding</button>
-    <button class="filter-btn" data-filter="studio">Studio</button>
-    <button class="filter-btn" data-filter="live">Live</button>
+  <div class="filter-container" role="toolbar" aria-label="Galerie-Filter">
+    <button class="filter-btn active" data-filter="all" aria-pressed="true">All</button>
+    <button class="filter-btn" data-filter="branding" aria-pressed="false">Branding</button>
+    <button class="filter-btn" data-filter="studio" aria-pressed="false">Studio</button>
+    <button class="filter-btn" data-filter="live" aria-pressed="false">Live</button>
   </div>
+  <p class="filter-summary" id="gallery-status" aria-live="polite"></p>
 
   <div class="gallery" id="gallery">
     <div class="gallery-item" data-category="branding" data-canvas="waveform">
@@ -325,9 +407,11 @@
     </div>
   </div>
 
-  <div class="lightbox" id="lightbox">
-    <button class="lightbox-close">&times;</button>
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" aria-hidden="true">
+    <button class="lightbox-close" aria-label="Lightbox schließen">&times;</button>
     <div class="lightbox-content">
+      <button class="lightbox-nav prev" aria-label="Vorheriges Visual">&#8249;</button>
+      <button class="lightbox-nav next" aria-label="Nächstes Visual">&#8250;</button>
       <canvas class="lightbox-canvas" id="lightbox-canvas"></canvas>
       <div class="lightbox-info">
         <div class="lightbox-title" id="lightbox-title"></div>
@@ -455,65 +539,247 @@
       oscilloscope: drawWaveform, circle: drawPulse
     };
 
-    let animOffsets = {};
-    const animateCanvas = (canvas, type) => {
-      if (!animOffsets[type]) animOffsets[type] = 0;
-      const animate = () => {
-        const rect = canvas.getBoundingClientRect();
-        const dpr = devicePixelRatio || 1;
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        const ctx = canvas.getContext('2d');
-        ctx.scale(dpr, dpr);
-        const fn = drawFunctions[type] || drawWaveform;
-        fn(ctx, rect.width, rect.height, animOffsets[type]);
-        animOffsets[type] += 2;
-        requestAnimationFrame(animate);
-      };
-      animate();
-    };
-
-    document.querySelectorAll('.item-canvas').forEach(c => {
-      animateCanvas(c, c.parentElement.dataset.canvas);
-    });
-
-    const filterBtns = document.querySelectorAll('.filter-btn');
-    const galleryItems = document.querySelectorAll('.gallery-item');
+    const MAX_DPR = 2;
+    const BASE_SPEED = 0.12;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const filterBtns = [...document.querySelectorAll('.filter-btn')];
+    const galleryItems = [...document.querySelectorAll('.gallery-item')];
     const lightbox = document.getElementById('lightbox');
     const lightboxCanvas = document.getElementById('lightbox-canvas');
     const lightboxTitle = document.getElementById('lightbox-title');
     const lightboxCategory = document.getElementById('lightbox-category');
+    const lightboxClose = lightbox.querySelector('.lightbox-close');
+    const lightboxPrev = lightbox.querySelector('.lightbox-nav.prev');
+    const lightboxNext = lightbox.querySelector('.lightbox-nav.next');
+    const galleryStatus = document.getElementById('gallery-status');
 
-    filterBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        filterBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const filter = btn.dataset.filter;
-        galleryItems.forEach(item => {
-          item.classList.toggle('hidden', filter !== 'all' && item.dataset.category !== filter);
-        });
-      });
-    });
+    const canvasStates = [];
+    let lightboxState = null;
+    let activeFilter = 'all';
+    let activeIndex = -1;
+    let rafId = null;
+    let lastFrame = 0;
+    let returnFocusTo = null;
 
-    galleryItems.forEach(item => {
-      item.addEventListener('click', () => {
-        lightboxTitle.textContent = item.querySelector('.gallery-item-title').textContent;
-        lightboxCategory.textContent = item.querySelector('.gallery-item-category').textContent;
-        lightbox.classList.add('open');
-      });
-    });
+    function createCanvasState(canvas, type, speed = BASE_SPEED) {
+      return {
+        canvas,
+        ctx: canvas.getContext('2d'),
+        type,
+        speed,
+        offset: Math.random() * 2000,
+        width: 0,
+        height: 0,
+        cssWidth: 0,
+        cssHeight: 0
+      };
+    }
 
-    lightbox.querySelector('.lightbox-close').addEventListener('click', () => {
+    function resizeCanvas(state) {
+      const rect = state.canvas.getBoundingClientRect();
+      const cssWidth = Math.max(1, Math.floor(rect.width));
+      const cssHeight = Math.max(1, Math.floor(rect.height));
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+      const width = Math.max(1, Math.floor(cssWidth * dpr));
+      const height = Math.max(1, Math.floor(cssHeight * dpr));
+      if (state.width === width && state.height === height) return false;
+      state.width = width;
+      state.height = height;
+      state.cssWidth = cssWidth;
+      state.cssHeight = cssHeight;
+      state.canvas.width = width;
+      state.canvas.height = height;
+      state.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return true;
+    }
+
+    function drawState(state, deltaMs) {
+      if (!state || !state.ctx) return;
+      if (state.canvas.closest('.gallery-item.hidden')) return;
+      const resized = resizeCanvas(state);
+      if (!resized && state.cssWidth === 0) return;
+      const fn = drawFunctions[state.type] || drawWaveform;
+      fn(state.ctx, state.cssWidth, state.cssHeight, state.offset);
+      state.offset += deltaMs * state.speed;
+    }
+
+    function renderFrame(deltaMs) {
+      canvasStates.forEach((state) => drawState(state, deltaMs));
+      if (lightbox.classList.contains('open')) {
+        drawState(lightboxState, deltaMs);
+      }
+    }
+
+    function tick(ts) {
+      const deltaMs = lastFrame ? Math.min(ts - lastFrame, 34) : 16;
+      lastFrame = ts;
+      renderFrame(deltaMs);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function startLoop() {
+      if (prefersReducedMotion.matches || document.hidden || rafId) return;
+      lastFrame = 0;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function stopLoop() {
+      if (!rafId) return;
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      lastFrame = 0;
+    }
+
+    function updateStatus(visibleCount) {
+      const total = galleryItems.length;
+      galleryStatus.textContent = `${visibleCount} von ${total} Visuals sichtbar`;
+    }
+
+    function closeLightbox() {
+      if (!lightbox.classList.contains('open')) return;
       lightbox.classList.remove('open');
+      lightbox.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modal-open');
+      activeIndex = -1;
+      if (returnFocusTo instanceof HTMLElement) returnFocusTo.focus();
+      returnFocusTo = null;
+    }
+
+    function applyFilter(filter) {
+      activeFilter = filter;
+      let visibleCount = 0;
+      filterBtns.forEach((btn) => {
+        const active = btn.dataset.filter === filter;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', String(active));
+      });
+      galleryItems.forEach((item) => {
+        const show = filter === 'all' || item.dataset.category === filter;
+        item.classList.toggle('hidden', !show);
+        item.hidden = !show;
+        if (show) visibleCount += 1;
+      });
+      if (activeIndex >= 0 && galleryItems[activeIndex]?.hidden) {
+        closeLightbox();
+      }
+      updateStatus(visibleCount);
+      renderFrame(0);
+    }
+
+    function findSiblingIndex(step) {
+      if (activeIndex === -1) return -1;
+      const total = galleryItems.length;
+      for (let i = 1; i < total; i += 1) {
+        const candidate = (activeIndex + step * i + total) % total;
+        if (!galleryItems[candidate].hidden) return candidate;
+      }
+      return -1;
+    }
+
+    function setLightboxFromIndex(index) {
+      const item = galleryItems[index];
+      if (!item || item.hidden || !lightboxState) return;
+      activeIndex = index;
+      lightboxTitle.textContent = item.querySelector('.gallery-item-title').textContent;
+      lightboxCategory.textContent = item.querySelector('.gallery-item-category').textContent;
+      lightboxState.type = item.dataset.canvas || 'waveform';
+      lightboxState.offset = canvasStates[index]?.offset ?? lightboxState.offset;
+      lightboxPrev.disabled = findSiblingIndex(-1) === -1;
+      lightboxNext.disabled = findSiblingIndex(1) === -1;
+      renderFrame(0);
+    }
+
+    function moveLightbox(step) {
+      const nextIndex = findSiblingIndex(step);
+      if (nextIndex !== -1) setLightboxFromIndex(nextIndex);
+    }
+
+    function openLightbox(index, triggerEl) {
+      if (!lightboxState) {
+        lightboxState = createCanvasState(lightboxCanvas, 'waveform');
+      }
+      returnFocusTo = triggerEl instanceof HTMLElement ? triggerEl : document.activeElement;
+      setLightboxFromIndex(index);
+      lightbox.classList.add('open');
+      lightbox.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      lightboxClose.focus();
+      renderFrame(0);
+      startLoop();
+    }
+
+    galleryItems.forEach((item, index) => {
+      const canvas = item.querySelector('.item-canvas');
+      const title = item.querySelector('.gallery-item-title').textContent;
+      const category = item.querySelector('.gallery-item-category').textContent;
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-label', `${title} · ${category} öffnen`);
+      canvasStates.push(createCanvasState(canvas, item.dataset.canvas || 'waveform'));
+      const open = () => openLightbox(index, item);
+      item.addEventListener('click', open);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      });
     });
+
+    filterBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        applyFilter(btn.dataset.filter || 'all');
+      });
+    });
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    lightboxPrev.addEventListener('click', () => moveLightbox(-1));
+    lightboxNext.addEventListener('click', () => moveLightbox(1));
 
     lightbox.addEventListener('click', (e) => {
-      if (e.target === lightbox) lightbox.classList.remove('open');
+      if (e.target === lightbox) closeLightbox();
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') lightbox.classList.remove('open');
+      if (e.key === 'Escape') closeLightbox();
+      if (!lightbox.classList.contains('open')) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        moveLightbox(-1);
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        moveLightbox(1);
+      }
     });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopLoop();
+      else {
+        renderFrame(0);
+        startLoop();
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      renderFrame(0);
+    }, { passive: true });
+
+    const onReducedMotionChange = () => {
+      renderFrame(0);
+      if (prefersReducedMotion.matches) stopLoop();
+      else startLoop();
+    };
+
+    if (typeof prefersReducedMotion.addEventListener === 'function') {
+      prefersReducedMotion.addEventListener('change', onReducedMotionChange);
+    } else {
+      prefersReducedMotion.addListener(onReducedMotionChange);
+    }
+
+    applyFilter(activeFilter);
+    renderFrame(0);
+    startLoop();
   </script>
 </body>
 </html>
