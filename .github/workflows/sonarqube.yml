@@ -18,8 +18,11 @@
 #
 #     * b. Copy/paste your SonarQube host URL to your GitHub repository's secrets using the name SONAR_HOST_URL
 #
-#     * c. Copy/paste the project Key into the args parameter below
+#     * c. Add the project key as the SONAR_PROJECT_KEY Actions variable
 #          (You'll find this information in SonarQube by following the tutorial or by clicking on Project Information at the top-right of your project's homepage)
+#
+# When SONAR_TOKEN is unavailable, the scan is skipped with a warning. This can
+# happen for fork or Dependabot pull requests, or before SonarQube is configured.
 
 # Feel free to take a look at our documentation (https://docs.sonarqube.org/latest/analysis/github-integration/)
 # or reach out to our community forum if you need some help (https://community.sonarsource.com/c/sq/10)
@@ -34,14 +37,39 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   pull-requests: read # allows SonarQube to decorate PRs with analysis results
 
 jobs:
   Analysis:
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
+      - name: Report unavailable SonarQube token
+        if: env.SONAR_TOKEN == ''
+        run: echo "::warning::SonarQube analysis skipped because SONAR_TOKEN is unavailable."
+
+      - name: Validate SonarQube configuration
+        if: env.SONAR_TOKEN != ''
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_PROJECT_KEY" ]; then
+            echo "::error::Set the SONAR_HOST_URL secret and SONAR_PROJECT_KEY variable to enable SonarQube analysis."
+            exit 1
+          fi
+
+      - name: Checkout code
+        if: env.SONAR_TOKEN != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
       - name: Analyze with SonarQube
+        if: env.SONAR_TOKEN != ''
 
         # You can pin the exact commit or the version.
         # uses: SonarSource/sonarqube-scan-action@v1.1.0
@@ -51,16 +79,4 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Generate a token on SonarQube, add it to the secrets of this repo with the name SONAR_TOKEN (Settings > Secrets > Actions > add new repository secret)
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}   # add the URL of your instance to the secrets of this repo with the name SONAR_HOST_URL (Settings > Secrets > Actions > add new repository secret)
         with:
-          # Additional arguments for the sonarcloud scanner
-          args:
-            # Unique key of your project. You can find it in SonarQube > [my project] > Project Information (top-right menu)
-            # mandatory
-            -Dsonar.projectKey=
-            # Comma-separated paths to directories containing main source files.
-            #-Dsonar.sources= # optional, default is project base directory
-            # When you need the analysis to take place in a directory other than the one from which it was launched
-            #-Dsonar.projectBaseDir= # optional, default is .
-            # Comma-separated paths to directories containing test source files.
-            #-Dsonar.tests= # optional. For more info about Code Coverage, please refer to https://docs.sonarcloud.io/enriching/test-coverage/overview/
-            # Adds more detail to both client and server-side analysis logs, activating DEBUG mode for the scanner, and adding client-side environment variables and system properties to the server-side log of analysis report processing.
-            #-Dsonar.verbose= # optional, default is false
+          args: -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
