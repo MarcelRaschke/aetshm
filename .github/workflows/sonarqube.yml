@@ -1,13 +1,31 @@
-# SonarQube / SonarCloud analysis
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# This workflow helps you trigger a SonarQube analysis of your code and populates
+# GitHub Code Scanning alerts with the vulnerabilities found.
+# (this feature is available starting from SonarQube 9.7, Developer Edition and above)
+
+# 1. Make sure you add a valid GitHub configuration to your SonarQube (Administration > DevOps platforms > GitHub)
+
+# 2. Import your project on SonarQube
+#     * Add your repository as a new project by clicking "Create project" from your homepage.
 #
-# Voraussetzungen (Settings > Secrets and variables > Actions):
-#   Secret   SONAR_TOKEN        Token aus SonarQube (My Account > Security) bzw. https://sonarcloud.io/account/security
-#   Secret   SONAR_HOST_URL     z.B. https://sonarcloud.io oder URL der eigenen Instanz
-#   Variable SONAR_PROJECT_KEY  Project Key (Fallback: MarcelRaschke_aetshm)
-#   Variable SONAR_ORGANIZATION optional, nur fuer SonarCloud
+# 3. Select GitHub Actions as your CI and follow the tutorial
+#     * a. Generate a new token and add it to your GitHub repository's secrets using the name SONAR_TOKEN
+#          (On SonarQube, click on your avatar on top-right > My account > Security or ask your administrator)
 #
-# Fehlt SONAR_TOKEN (Fork-PR, Dependabot, noch nicht konfiguriert), wird der Scan
-# mit Warnung uebersprungen statt den Job fehlschlagen zu lassen.
+#     * b. Copy/paste your SonarQube host URL to your GitHub repository's secrets using the name SONAR_HOST_URL
+#
+#     * c. Add the project key as the SONAR_PROJECT_KEY Actions variable
+#          (You'll find this information in SonarQube by following the tutorial or by clicking on Project Information at the top-right of your project's homepage)
+#
+# When SONAR_TOKEN is unavailable, the scan is skipped with a warning. This can
+# happen for fork or Dependabot pull requests, or before SonarQube is configured.
+
+# Feel free to take a look at our documentation (https://docs.sonarqube.org/latest/analysis/github-integration/)
+# or reach out to our community forum if you need some help (https://community.sonarsource.com/c/sq/10)
 
 name: SonarQube analysis
 
@@ -33,24 +51,39 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
+      - name: Report unavailable SonarQube token
+        if: env.SONAR_TOKEN == ''
+        run: echo "::warning::SonarQube analysis skipped because SONAR_TOKEN is unavailable."
+
+      - name: Validate SonarQube configuration
+        if: env.SONAR_TOKEN != ''
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_PROJECT_KEY" ]; then
+            echo "::error::Set the SONAR_HOST_URL secret and SONAR_PROJECT_KEY variable to enable SonarQube analysis."
+            exit 1
+          fi
+
       - name: Checkout code
         if: env.SONAR_TOKEN != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # volle History fuer Blame und New-Code-Erkennung
+          fetch-depth: 0
 
       - name: Analyze with SonarQube
         if: env.SONAR_TOKEN != ''
+
+        # You can pin the exact commit or the version.
+        # uses: SonarSource/sonarqube-scan-action@v1.1.0
         uses: SonarSource/sonarqube-scan-action@7295e71c9583053f5bf40e9d4068a0c974603ec8
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Generate a token on SonarQube, add it to the secrets of this repo with the name SONAR_TOKEN (Settings > Secrets > Actions > add new repository secret)
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}   # add the URL of your instance to the secrets of this repo with the name SONAR_HOST_URL (Settings > Secrets > Actions > add new repository secret)
         with:
+          # SONAR_ORGANIZATION (Actions variable) is optional and only needed for SonarCloud
           args: >
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'MarcelRaschke_aetshm' }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
             ${{ vars.SONAR_ORGANIZATION && format('-Dsonar.organization={0}', vars.SONAR_ORGANIZATION) || '' }}
-
-      - name: Skip notice
-        if: env.SONAR_TOKEN == ''
-        run: echo "::warning title=SonarQube::SONAR_TOKEN nicht verfuegbar (Fork-PR, Dependabot oder nicht konfiguriert) - Scan uebersprungen."
