@@ -37,7 +37,7 @@ echo "Organization: ${ORG:-<keine>}"
 echo
 
 read -rsp "SONAR_TOKEN: " TOKEN; echo
-[ -n "$TOKEN" ] || { echo "Token leer – Abbruch" >&2; exit 1; }
+[[ -n "$TOKEN" ]] || { echo "Token leer – Abbruch" >&2; exit 1; }
 
 if ! curl -fsS -u "$TOKEN:" "$HOST/api/authentication/validate" | grep -q '"valid":true'; then
   echo "Token ist für $HOST ungültig – Abbruch" >&2
@@ -51,7 +51,7 @@ printf '%s' "$HOST"  | gh secret set SONAR_HOST_URL -R "$REPO"
 unset TOKEN
 
 gh variable set SONAR_PROJECT_KEY -R "$REPO" --body "$KEY"
-if [ -n "$ORG" ]; then
+if [[ -n "$ORG" ]]; then
   gh variable set SONAR_ORGANIZATION -R "$REPO" --body "$ORG"
 else
   gh variable delete SONAR_ORGANIZATION -R "$REPO" 2>/dev/null || true
