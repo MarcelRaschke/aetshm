@@ -40,6 +40,10 @@ permissions:
   contents: read
   pull-requests: read # allows SonarQube to decorate PRs with analysis results
 
+concurrency:
+  group: sonarqube-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   Analysis:
     runs-on: ubuntu-latest
@@ -71,12 +75,15 @@ jobs:
       - name: Analyze with SonarQube
         if: env.SONAR_TOKEN != ''
 
-        # You can pin the exact commit or the version.
-        # uses: SonarSource/sonarqube-scan-action@v1.1.0
-        uses: SonarSource/sonarqube-scan-action@7295e71c9583053f5bf40e9d4068a0c974603ec8
+        # Pinned to a commit SHA. The previous pin (7295e71, v1.x) shipped a
+        # Java 11 scanner that fails with UnsupportedClassVersionError (needs 17+).
+        uses: SonarSource/sonarqube-scan-action@70bad232163b09d998ea0707ee80c0ec80798c16 # v8.5.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Generate a token on SonarQube, add it to the secrets of this repo with the name SONAR_TOKEN (Settings > Secrets > Actions > add new repository secret)
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}   # add the URL of your instance to the secrets of this repo with the name SONAR_HOST_URL (Settings > Secrets > Actions > add new repository secret)
         with:
-          args: -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+          # SONAR_ORGANIZATION (Actions variable) is optional and only needed for SonarCloud
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            ${{ vars.SONAR_ORGANIZATION && format('-Dsonar.organization={0}', vars.SONAR_ORGANIZATION) || '' }}
