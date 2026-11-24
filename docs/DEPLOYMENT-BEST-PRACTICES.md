@@ -61,7 +61,7 @@ docker-compose -f docker-compose.dev.yml down
 
 Monitor workflow runs:
 ```
-https://github.com/MarcelRaschke/Blue-Dimension-/actions
+https://github.com/MarcelRaschke/aetshm/actions
 ```
 
 Key workflows:
@@ -74,7 +74,7 @@ Key workflows:
 
 Track deployment history:
 ```
-https://github.com/MarcelRaschke/Blue-Dimension-/deployments
+https://github.com/MarcelRaschke/aetshm/deployments
 ```
 
 Shows:
@@ -468,6 +468,6 @@ chmod 644 ~/.ssh/id_rsa.pub
 - [MySQL Backup & Recovery](https://dev.mysql.com/doc/refman/8.0/en/backup-types.html)
 
 **Support:**
-- GitHub Issues: https://github.com/MarcelRaschke/Blue-Dimension-/issues
-- Deployment Logs: https://github.com/MarcelRaschke/Blue-Dimension-/actions
+- GitHub Issues: https://github.com/MarcelRaschke/aetshm/issues
+- Deployment Logs: https://github.com/MarcelRaschke/aetshm/actions
 - Server Logs: `/var/log/nginx/`, `/var/log/php-fpm/`
