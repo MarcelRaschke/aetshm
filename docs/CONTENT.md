@@ -8,6 +8,7 @@ Die öffentlichen Seiten liegen in `public/` (Docroot laut `docker/nginx/conf.d/
 | --- | --- |
 | `templates/*.php` | Seitenvorlagen: Start, Biografie, News, Events, Musik, Galerie, Links, Gästebuch |
 | `public/*.html` | Ausgelieferte Seiten, erzeugt durch `scripts/render-static.php`. Kein PHP zur Laufzeit |
+| `public/blue-dimension-gallery.html` | Eigenständige, handgeschriebene Demo-Seite mit Canvas-Visuals (nicht von `render-static.php` erzeugt) |
 | `scripts/render-static.php` | Rendert `templates/` nach `public/*.html` (Build-Schritt) |
 | `public/assets/site.css` | Stylesheet (Synthwave-Look, Neon-Akzente) |
 | `app/config.php` | Konstanten, `GALLERY_BASE_URL` per Umgebungsvariable überschreibbar |
@@ -44,6 +45,8 @@ php scripts/test-site.php
 ```
 
 Die Seiten werden nur beim Bauen mit PHP erzeugt. Ausgeliefert wird das statische Ergebnis in `public/` (Nginx, kein PHP-FPM). Nach jeder Änderung an `templates/`, `app/` oder `content/` muss `render-static.php` erneut laufen, und die geänderten `public/*.html` werden mit eingecheckt. Die Tests vergleichen die eingecheckten HTML-Dateien mit den Vorlagen.
+
+Ausnahme: `public/blue-dimension-gallery.html` ist eine eigenständige Datei und wird nicht aus `templates/` generiert.
 
 Der Build bricht ab, wenn ein Dump fehlt oder kein gültiges UTF-8 enthält. Nach jeder Änderung an einem Dump muss der Build erneut laufen und `content/` mit eingecheckt werden.
 
